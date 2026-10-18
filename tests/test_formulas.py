@@ -1,5 +1,6 @@
 import json
 import shutil
+from pathlib import Path
 
 import pypdfium2
 import pytest
@@ -7,7 +8,7 @@ from PIL import Image
 
 from texformules import BP_PER_PT, Formula, FormulaBook, PdfBox, default_cache, default_preamble
 from texformules import formulas as formulas_module
-from texformules.formulas import _faulty
+from texformules.formulas import _distribution_trees, _faulty
 
 # TeX writes the MediaBox to three decimals; pdfium reads it back as single floats.
 TOLERANCE_BP = 2e-3
@@ -275,3 +276,13 @@ def test_text_mode_dingbats_typeset_as_glyphs(tmp_path, engine, single_page):
         kinds = {kind for kind, _ in objects}
         assert pypdfium2.raw.FPDF_PAGEOBJ_TEXT in kinds
         assert pypdfium2.raw.FPDF_PAGEOBJ_IMAGE not in kinds
+
+
+def test_distribution_trees_never_include_the_root(monkeypatch):
+    """A TeX Live packaged by Debian lives in /usr/share: a tree named « / » would leave
+    the user's own macros out of the manifest."""
+    trees = {"-var-value=TEXMFDIST": "/usr/share/texlive/texmf-dist", "-var-value=TEXMFVAR": "/"}
+    monkeypatch.setattr(
+        formulas_module, "_kpsewhich", lambda argument: Path(trees[argument]) if argument in trees else None
+    )
+    assert _distribution_trees() == [Path("/usr/share/texlive/texmf-dist")]

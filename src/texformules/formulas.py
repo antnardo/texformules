@@ -196,6 +196,24 @@ def default_preamble() -> str:
     return _FALLBACK_PREAMBLE
 
 
+# The trees of the distribution and of its generated files: what changes only with it.
+# TEXMFHOME and TEXMFLOCAL are left out, where users keep their own macros. The trees
+# are named one by one rather than by SELFAUTOPARENT, the parent of the binaries'
+# folder: that is « / » for a TeX Live packaged by Debian or Ubuntu (/usr/bin), and
+# would leave every file out.
+_DISTRIBUTION_TREES = ("TEXMFDIST", "TEXMFMAIN", "TEXMFSYSVAR", "TEXMFSYSCONFIG", "TEXMFVAR", "TEXMFCONFIG")
+
+
+def _distribution_trees() -> list[Path]:
+    """The folders of the TeX distribution, as kpsewhich names them; never the root."""
+    trees = []
+    for variable in _DISTRIBUTION_TREES:
+        path = _kpsewhich(f"-var-value={variable}")
+        if path is not None and path.is_absolute() and path.resolve() != Path(path.anchor):
+            trees.append(path)
+    return trees
+
+
 def _kpsewhich(*arguments: str) -> Path | None:
     program = shutil.which("kpsewhich")
     if program is None:
@@ -459,11 +477,7 @@ class FormulaBook:
         recorder = work / f"{_JOB}.fls"
         if not recorder.is_file():
             return
-        distribution = [
-            path
-            for path in (_kpsewhich("-var-value=SELFAUTOPARENT"), _kpsewhich("-var-value=TEXMFVAR"))
-            if path
-        ]
+        distribution = _distribution_trees()
         inputs: dict[str, None] = {}
         base = work
         for line in recorder.read_text(encoding="utf-8", errors="replace").splitlines():

@@ -317,8 +317,9 @@ in the manifest, and the source. So:
 - **editing a file the preamble reads** gives new keys at the next batch. The manifest
   lists the `INPUT` lines of the `.fls` with a TeX or Lua suffix (`.tex`, `.sty`,
   `.cls`, `.cfg`, `.def`, `.fd`, `.clo`, `.ldf`, `.ltx`, `.lua`) that lie neither in
-  the compilation folder nor under the distribution (`SELFAUTOPARENT`, `TEXMFVAR`):
-  files under `TEXMFHOME` are followed;
+  the compilation folder nor in a tree of the distribution (`TEXMFDIST`, `TEXMFMAIN`,
+  `TEXMFSYSVAR`, `TEXMFSYSCONFIG`, `TEXMFVAR`, `TEXMFCONFIG`, as `kpsewhich` names
+  them): files under `TEXMFHOME` and `TEXMFLOCAL` are followed;
 - upgrading the distribution changes the engine's path when its year is in it (TeX
   Live, MacTeX), hence the keys.
 
