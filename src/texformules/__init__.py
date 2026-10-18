@@ -11,8 +11,7 @@ Two steps, two modules:
   (:class:`FormulaBook`, :class:`PdfBox`).
 
 Only latexdetok and pypdfium2 are needed to import it; LaTeX is called at the first
-missing formula. ``texformules.figures``, with the ``figures`` extra, styles matplotlib
-figures for the same documents.
+missing formula.
 
     book = FormulaBook(default_cache(), dpi=600)
     fragments = split(r"Result: $T_0=\\SI{2.0}{s}$, 2 marks")
@@ -32,7 +31,7 @@ from texformules.formulas import (
 )
 from texformules.fragments import Fragment, Problem, comments, french_spacing, split
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
 __all__ = [
     "BP_PER_PT",

@@ -1,12 +1,10 @@
 import re
-import subprocess
-import sys
 from pathlib import Path
 
 import texformules
 
-# Every name downstream code imports today: they must not move.
-DEPENDENTS_USE = {
+# The public API: these names are what users import.
+PUBLIC = {
     "BP_PER_PT",
     "Formula",
     "FormulaBook",
@@ -24,12 +22,6 @@ def test_version_read_by_pyproject():
     assert re.fullmatch(r"\d+\.\d+\.\d+", texformules.__version__)
 
 
-def test_public_api_keeps_the_names_dependents_use():
-    assert set(texformules.__all__) >= DEPENDENTS_USE
+def test_public_api_is_exported():
+    assert set(texformules.__all__) >= PUBLIC
     assert all(hasattr(texformules, name) for name in texformules.__all__)
-
-
-def test_core_import_does_not_load_matplotlib():
-    code = "import sys, texformules; print('matplotlib' in sys.modules, 'texformules.figures' in sys.modules)"
-    result = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, check=True)
-    assert result.stdout.split() == ["False", "False"]

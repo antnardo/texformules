@@ -5,13 +5,13 @@ build-backend = "hatchling.build"
 [project]
 name = "texformules"
 dynamic = ["version"]
-description = "LaTeX formulas typeset in one batch, cached as PNG and one-page PDF with their baseline; matplotlib figures styled for LaTeX documents."
+description = "LaTeX formulas for documents made in Python: typeset in one batch with your preamble, cached as PNG and one-page PDF with their baseline."
 readme = "README.md"
 requires-python = ">=3.13"
 license = "MIT"
 license-files = ["LICENSE"]
 authors = [{ name = "antnardo", email = "antnardo@users.noreply.github.com" }]
-keywords = ["latex", "formula", "math", "pdf", "png", "baseline", "reportlab", "matplotlib", "siunitx"]
+keywords = ["latex", "formula", "math", "pdf", "png", "baseline", "reportlab", "siunitx"]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
@@ -24,7 +24,6 @@ classifiers = [
     "Programming Language :: Python :: 3.13",
     "Programming Language :: Python :: 3.14",
     "Topic :: Printing",
-    "Topic :: Scientific/Engineering :: Visualization",
     "Topic :: Text Processing :: Markup :: LaTeX",
     "Typing :: Typed",
 ]
@@ -36,10 +35,6 @@ dependencies = [
     # pypdfium2 hands its bitmaps over as PIL images, which are saved as PNG.
     "pillow>=10.0",
 ]
-
-[project.optional-dependencies]
-# matplotlib figures styled for LaTeX documents (texformules.figures).
-figures = ["matplotlib>=3.8"]
 
 [project.urls]
 Homepage = "https://github.com/antnardo/texformules"
@@ -53,7 +48,6 @@ dev = [
     "pytest>=8.0",
     "ruff>=0.6",
     "mypy>=1.11",
-    "matplotlib>=3.8",
 ]
 
 # The version lives in the module: a single source, which the publish workflow

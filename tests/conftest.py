@@ -1,14 +1,10 @@
 import shutil
 from pathlib import Path
 
-import matplotlib
 import pypdfium2
 import pytest
 
 from texformules import BP_PER_PT, FormulaBook
-
-# Figures drawn off screen, before any test imports pyplot.
-matplotlib.use("Agg")
 
 # 30 pt by 8 pt + 2.5 pt, plus the half-point border on each side.
 FAKE_PAGE = (31 * BP_PER_PT, 11.5 * BP_PER_PT)
@@ -92,14 +88,3 @@ def single_page():
         return (right - left, top - bottom), objects
 
     return read
-
-
-@pytest.fixture
-def figures():
-    """texformules.figures; the figures are closed after the test."""
-    import matplotlib.pyplot as plt
-
-    import texformules.figures
-
-    yield texformules.figures
-    plt.close("all")

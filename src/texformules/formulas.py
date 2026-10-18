@@ -103,7 +103,7 @@ _JOB = "formules"
 _OWN_ERROR = "own"
 # The sources recorded in the manifest, data files excluded (see the module docstring).
 _SOURCES = frozenset({".tex", ".sty", ".cls", ".cfg", ".def", ".fd", ".clo", ".ldf", ".ltx", ".lua"})
-_FALLBACK_PREAMBLE = "\\usepackage{amsmath,amssymb}\n\\usepackage{siunitx}"
+_DEFAULT_PREAMBLE = "\\usepackage{amsmath,amssymb}\n\\usepackage{siunitx}"
 
 #: What runs the engine: ``subprocess.run``'s signature; tests pass a fake.
 Runner = Callable[..., Any]
@@ -185,15 +185,9 @@ def default_cache() -> Path:
 
 
 def default_preamble() -> str:
-    """amsmath, amssymb and siunitx; ``\\input{ampackages}`` when kpsewhich finds it.
-
-    ``ampackages`` is its author's own macro suite: on any other machine kpsewhich does
-    not find it, and the fallback applies. Pass ``preamble=`` to :class:`FormulaBook`
-    to use your own.
-    """
-    if _kpsewhich("ampackages.tex") is not None:
-        return "\\input{ampackages}"
-    return _FALLBACK_PREAMBLE
+    """amsmath, amssymb and siunitx. Pass ``preamble=`` to :class:`FormulaBook` to use
+    your own."""
+    return _DEFAULT_PREAMBLE
 
 
 # The trees of the distribution and of its generated files: what changes only with it.

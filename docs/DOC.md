@@ -22,33 +22,19 @@
   - [How errors are located](#how-errors-are-located)
   - [The cache](#the-cache)
   - [The JSON of `Formula.to_json()`](#the-json-of-formulato_json)
-- [Figures](#figures)
-  - [`apply_style`](#apply_style)
-  - [`style_params`](#style_params)
-  - [`restore_style`](#restore_style)
-  - [`figure_size`](#figure_size)
-  - [`style_axes`](#style_axes)
-  - [`DecimalCommaFormatter`](#decimalcommaformatter)
-  - [`add_inset`](#add_inset)
-  - [`save_figure`](#save_figure)
-  - [Constants](#constants)
-  - [Names from `latex_figures`](#names-from-latex_figures)
 - [Troubleshooting](#troubleshooting)
 - [Every name the package exports](#every-name-the-package-exports)
 
 ## Overview
 
-Two steps, two modules, and an optional third:
+Two steps, two modules:
 
 | Module | Does | Needs |
 | --- | --- | --- |
 | `texformules.fragments` | cuts a line into text and LaTeX fragments | latexdetok |
 | `texformules.formulas` | typesets fragments in one batch, caches PNG and PDF | pypdfium2, Pillow, a TeX distribution at run time |
-| `texformules.figures` | styles matplotlib figures for LaTeX documents | the `figures` extra (matplotlib) |
 
-Everything in the first two is re-exported by `texformules`. `import texformules`
-does not import matplotlib; `import texformules.figures` without matplotlib raises
-`ModuleNotFoundError` with the extra to install.
+Everything is re-exported by `texformules`.
 
 ## Splitting text
 
@@ -248,9 +234,8 @@ program.
 default_preamble() -> str
 ```
 
-`\usepackage{amsmath,amssymb}` and `\usepackage{siunitx}`, or `\input{ampackages}`
-when `kpsewhich ampackages.tex` finds that file (its author's own suite; on other
-machines it is absent and the fallback applies). Pass `preamble=` to use your own.
+`\usepackage{amsmath,amssymb}` and `\usepackage{siunitx}`. Pass `preamble=` to use your
+own.
 
 ### `Runner`
 
@@ -348,139 +333,6 @@ For a rejected formula:
 
 `error` is `"rejected by LaTeX"` when no message was kept.
 
-## Figures
-
-`from texformules.figures import …`, with the `figures` extra. Sizes are in
-centimetres.
-
-### `apply_style`
-
-```python
-apply_style(width=None, height=None, ratio=None, usetex=True,
-            family="sans-serif", preamble=None) -> dict[str, Any]
-```
-
-Updates `matplotlib.rcParams` with `style_params(...)` and returns them. Call it
-before creating the figures; figures already created keep their settings. The first
-call saves the settings it changes, for `restore_style`. No locale is changed.
-
-### `style_params`
-
-```python
-style_params(width=None, height=None, ratio=None, usetex=True,
-             family="sans-serif", preamble=None) -> dict[str, Any]
-```
-
-The settings without applying them, for `plt.rc_context(style_params(8, 6))`.
-
-| Parameter | Meaning |
-| --- | --- |
-| `width` | cm, 16 by default |
-| `height` | cm; by default `ratio` × `width` |
-| `ratio` | the golden ratio (0.618) by default |
-| `usetex` | render text with LaTeX (`latex`, dvipng or ghostscript needed) |
-| `family` | `"sans-serif"` or `"serif"` |
-| `preamble` | `text.latex.preamble`: a string, or a list of lines; `PREAMBLE` by default, `""` for none; used only with `usetex` |
-
-The settings: 11 pt labels and titles, 10 pt ticks, 8 pt legend, mathtext tick
-formatting, Arial/Helvetica or Times, subplot margins suited to a small figure,
-`pgf.texsystem = "pdflatex"`.
-
-### `restore_style`
-
-```python
-restore_style() -> None
-```
-
-Gives back the settings from before the first `apply_style`; does nothing if it was
-not called, or a second time.
-
-### `figure_size`
-
-```python
-figure_size(width=16.0, height=None, ratio=None) -> tuple[float, float]
-```
-
-The size in inches of a figure given in cm. Without `height`, it is `ratio` × `width`
-(golden ratio by default). A height over `MAX_HEIGHT` (22 cm) is brought down to it,
-with a `UserWarning`.
-
-### `style_axes`
-
-```python
-style_axes(ax=None, format_ticks=True, decimal_comma=True) -> Axes
-```
-
-Grey 0.5 pt spines, ticks outward at the bottom and left, and with `format_ticks` a
-formatter of its own on each linear axis: `DecimalCommaFormatter`, or with
-`decimal_comma=False` a mathtext `ScalarFormatter` with the same power limits.
-Logarithmic axes keep theirs. Calls `tight_layout` on the figure. `ax` defaults to
-`plt.gca()`; returns it.
-
-### `DecimalCommaFormatter`
-
-A `matplotlib.ticker.ScalarFormatter` in math notation, with powers of ten outside
-[10⁻², 10⁴], writing `1{,}5` for 1.5 (`{,}` keeps math mode from adding a space after
-the comma). The comma does not come from `locale`, which acts on the whole program and
-fails without a French locale.
-
-### `add_inset`
-
-```python
-add_inset(ax, rect) -> Axes
-```
-
-Inset axes inside `ax`, `rect = [x0, y0, width, height]` in fractions of `ax`. Tick
-labels shrink as the square root of the relative size. Built on `Axes.inset_axes`, so
-the inset follows `ax` when the layout changes.
-
-### `save_figure`
-
-```python
-save_figure(fig, path, fmt=None, dpi=300, tight=True, crop=True) -> Path
-```
-
-Saves `fig` as PDF, PNG or EPS, from the extension of `path` or from `fmt`, adding the
-extension when missing, then crops it to the ink with the first tool found in
-`FORMATS`: pdfcrop, ImageMagick (`magick` or `convert`), epstool. No shell is used,
-and the temporary file is deleted. Returns the absolute path written.
-
-- `ValueError` for another format;
-- a `UserWarning`, and an uncropped figure, when no tool is found;
-- `subprocess.CalledProcessError` when the tool fails.
-
-### Constants
-
-| Name | Value |
-| --- | --- |
-| `PREAMBLE` | `\usepackage{amsmath}` and `\usepackage{siunitx}` |
-| `INCH` | 2.54 (cm) |
-| `MAX_HEIGHT` | 22.0 (cm), the usable height of an A4 page |
-| `FORMATS` | format → list of cropping commands, `{e}` the input, `{s}` the output |
-
-### Names from `latex_figures`
-
-The figures were the `latex_figures` package. Its names are kept, **deprecated**, so
-that scripts only change their import (`from latex_figures import …` becomes
-`from texformules.figures import …`). They will be removed in a future major
-release.
-
-| Old name | New name | Note |
-| --- | --- | --- |
-| `latexify(fig_width, fig_height, ratio, usetex, famille, preamble)` | `apply_style(width, height, ratio, usetex, family, preamble)` | the old one keeps `PREAMBULE` as its default |
-| `parametres_latex(...)` | `style_params(...)` | same |
-| `restaurer()` | `restore_style()` | the same function |
-| `fig_size(fig_width, fig_height, ratio)` | `figure_size(width, height, ratio)` | |
-| `format_axes(ax, format_ticks)` | `style_axes(ax, format_ticks, decimal_comma)` | the same function |
-| `ScalarFormatterVirgule` | `DecimalCommaFormatter` | the same class |
-| `add_subplot_axes(ax, rect)` | `add_inset(ax, rect)` | the same function |
-| `save_fig(fig, file_name, fmt, dpi, tight, crop)` | `save_figure(fig, path, fmt, dpi, tight, crop)` | |
-| `PREAMBULE` | `PREAMBLE` | the old one loads `\usepackage[french]{babel}` and siunitx; the new one amsmath and siunitx |
-| `INCH`, `MAX_HEIGHT`, `FORMATS` | unchanged | |
-
-They live in `texformules.figures.legacy` and are re-exported by
-`texformules.figures`.
-
 ## Troubleshooting
 
 **Every formula fails with `no LaTeX distribution on this machine`.** Neither
@@ -500,12 +352,6 @@ followed. Move it under `TEXMFHOME` or next to your project, or delete the cache
 
 **Formulas look right on screen but blurry on paper.** Use the PDF (`book.pdf`) with
 reportlab-layout's `inline_pdf`, or raise `dpi` to 600.
-
-**`ModuleNotFoundError: texformules.figures needs matplotlib`.** Install the extra:
-`pip install "texformules[figures]"`.
-
-**Figures fail with `usetex`.** matplotlib needs `latex`, and dvipng or ghostscript,
-plus the packages of the preamble (siunitx). Pass `usetex=False` to use mathtext.
 
 **latexdetok's messages are in the wrong language.** Call
 `latexdetok.set_language("en")` or `("fr")`, or set `LATEXDETOK_LANG`.
@@ -532,9 +378,3 @@ plus the packages of the preamble (siunitx). Pass `usetex=False` to use mathtext
 | `default_preamble` | function |
 | `french_spacing` | function |
 | `split` | function |
-
-`texformules.figures`: `FORMATS`, `INCH`, `MAX_HEIGHT`, `PREAMBLE`,
-`DecimalCommaFormatter`, `add_inset`, `apply_style`, `figure_size`, `restore_style`,
-`save_figure`, `style_axes`, `style_params`; deprecated: `PREAMBULE`,
-`ScalarFormatterVirgule`, `add_subplot_axes`, `fig_size`, `format_axes`, `latexify`,
-`parametres_latex`, `restaurer`, `save_fig`.

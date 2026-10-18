@@ -54,10 +54,8 @@ jobs:
       - run: uv run mypy
 
   latex:
-    # Compiles real formulas and figures. preview.sty comes with
-    # preview-latex-style, siunitx with texlive-science, pdfcrop with
-    # texlive-extra-utils; matplotlib's usetex needs dvipng, ghostscript and
-    # cm-super; the legacy figure preamble loads French babel.
+    # Compiles real formulas. preview.sty comes with preview-latex-style, siunitx
+    # with texlive-science; the tests also typeset French text.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

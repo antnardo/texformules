@@ -181,16 +181,10 @@ def test_default_cache_per_platform(monkeypatch, platform, parts):
     assert default_cache().parts[-len(parts) :] == parts
 
 
-class TestDefaultPreamble:
-    def test_fallback_loads_amsmath_and_siunitx(self, monkeypatch):
-        monkeypatch.setattr(formulas_module, "_kpsewhich", lambda *arguments: None)
-        preamble = default_preamble()
-        assert "{amsmath,amssymb}" in preamble
-        assert "{siunitx}" in preamble
-
-    def test_ampackages_used_when_kpsewhich_finds_it(self, monkeypatch, tmp_path):
-        monkeypatch.setattr(formulas_module, "_kpsewhich", lambda *arguments: tmp_path / "ampackages.tex")
-        assert default_preamble() == "\\input{ampackages}"
+def test_default_preamble_loads_amsmath_and_siunitx():
+    preamble = default_preamble()
+    assert "{amsmath,amssymb}" in preamble
+    assert "{siunitx}" in preamble
 
 
 class TestFaulty:
