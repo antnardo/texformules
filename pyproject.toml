@@ -1,0 +1,100 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "texformules"
+dynamic = ["version"]
+description = "LaTeX formulas typeset in one batch, cached as PNG and one-page PDF with their baseline; matplotlib figures styled for LaTeX documents."
+readme = "README.md"
+requires-python = ">=3.13"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "antnardo", email = "antnardo@users.noreply.github.com" }]
+keywords = ["latex", "formula", "math", "pdf", "png", "baseline", "reportlab", "matplotlib", "siunitx"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Education",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Natural Language :: English",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Printing",
+    "Topic :: Scientific/Engineering :: Visualization",
+    "Topic :: Text Processing :: Markup :: LaTeX",
+    "Typing :: Typed",
+]
+dependencies = [
+    # Reads each line as TeX would, to cut it into text and formulas and to locate errors.
+    "latexdetok>=0.7.0",
+    # Renders the batch's pages to PNG and extracts each one as a one-page PDF.
+    "pypdfium2>=4.30",
+    # pypdfium2 hands its bitmaps over as PIL images, which are saved as PNG.
+    "pillow>=10.0",
+]
+
+[project.optional-dependencies]
+# matplotlib figures styled for LaTeX documents (texformules.figures).
+figures = ["matplotlib>=3.8"]
+
+[project.urls]
+Homepage = "https://github.com/antnardo/texformules"
+Documentation = "https://github.com/antnardo/texformules/blob/main/docs/DOC.md"
+Repository = "https://github.com/antnardo/texformules"
+Issues = "https://github.com/antnardo/texformules/issues"
+Changelog = "https://github.com/antnardo/texformules/blob/main/CHANGELOG.md"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+    "ruff>=0.6",
+    "mypy>=1.11",
+    "matplotlib>=3.8",
+]
+
+# The version lives in the module: a single source, which the publish workflow
+# checks against the tag.
+[tool.hatch.version]
+path = "src/texformules/__init__.py"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/texformules"]
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "/src",
+    "/tests",
+    "/docs",
+    "/examples",
+    "/README.md",
+    "/LICENSE",
+    "/CHANGELOG.md",
+]
+
+[tool.ruff]
+line-length = 110
+target-version = "py313"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "RUF", "N", "C4", "PTH", "RET"]
+ignore = ["RUF001", "RUF002", "RUF003"]  # unicode look-alikes: the prose uses typographic dashes
+
+[tool.pytest.ini_options]
+minversion = "8.0"
+testpaths = ["tests"]
+addopts = "-q --strict-markers"
+markers = [
+    "latex: compiles with a real TeX distribution; skipped when it is missing",
+]
+
+[tool.mypy]
+python_version = "3.13"
+files = ["src"]
+mypy_path = ["src"]
+explicit_package_bases = true
+ignore_missing_imports = true

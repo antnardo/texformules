@@ -1,0 +1,98 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    # The package writes a cache and renders images: Linux, macOS and Windows.
+    # The `latex` tests are skipped here (no TeX on the runners); the latex job runs them.
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        python-version: ["3.13", "3.14"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          enable-cache: true
+          cache-dependency-glob: "**/pyproject.toml"
+      - run: uv sync --group dev
+      - name: Test
+        run: uv run pytest -q -m "not latex"
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.13"
+          enable-cache: true
+          cache-dependency-glob: "**/pyproject.toml"
+      - run: uv sync --group dev
+      - name: Lint
+        run: uv run ruff check src tests examples
+      - name: Format
+        run: uv run ruff format --check src tests examples
+
+  types:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.13"
+          enable-cache: true
+          cache-dependency-glob: "**/pyproject.toml"
+      - run: uv sync --group dev
+      - run: uv run mypy
+
+  latex:
+    # Compiles real formulas and figures. preview.sty comes with
+    # preview-latex-style, siunitx with texlive-science, pdfcrop with
+    # texlive-extra-utils; matplotlib's usetex needs dvipng, ghostscript and
+    # cm-super; the legacy figure preamble loads French babel.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.13"
+          enable-cache: true
+          cache-dependency-glob: "**/pyproject.toml"
+      - name: Install a TeX distribution
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q --no-install-recommends \
+            texlive-latex-base texlive-latex-recommended texlive-latex-extra \
+            texlive-science texlive-luatex texlive-fonts-recommended texlive-extra-utils \
+            texlive-lang-french preview-latex-style cm-super dvipng ghostscript
+      - name: TeX on the PATH
+        run: |
+          lualatex --version | head -1
+          kpsewhich preview.sty siunitx.sty
+      - run: uv sync --group dev
+      - name: LaTeX tests
+        run: uv run pytest -q -m latex -rs
+
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.13"
+          enable-cache: true
+          cache-dependency-glob: "**/pyproject.toml"
+      - run: uv build
+      - run: uvx twine check dist/*
+      - uses: actions/upload-artifact@v4
+        with:
+          name: distributions
+          path: dist/
