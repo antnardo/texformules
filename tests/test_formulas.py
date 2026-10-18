@@ -278,11 +278,10 @@ def test_text_mode_dingbats_typeset_as_glyphs(tmp_path, engine, single_page):
         assert pypdfium2.raw.FPDF_PAGEOBJ_IMAGE not in kinds
 
 
-def test_distribution_trees_never_include_the_root(monkeypatch):
+def test_distribution_trees_never_include_the_root(monkeypatch, tmp_path):
     """A TeX Live packaged by Debian lives in /usr/share: a tree named « / » would leave
     the user's own macros out of the manifest."""
-    trees = {"-var-value=TEXMFDIST": "/usr/share/texlive/texmf-dist", "-var-value=TEXMFVAR": "/"}
-    monkeypatch.setattr(
-        formulas_module, "_kpsewhich", lambda argument: Path(trees[argument]) if argument in trees else None
-    )
-    assert _distribution_trees() == [Path("/usr/share/texlive/texmf-dist")]
+    dist = tmp_path / "texlive" / "texmf-dist"
+    trees = {"-var-value=TEXMFDIST": dist, "-var-value=TEXMFVAR": Path(tmp_path.anchor)}
+    monkeypatch.setattr(formulas_module, "_kpsewhich", lambda argument: trees.get(argument))
+    assert _distribution_trees() == [dist]
