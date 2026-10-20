@@ -122,6 +122,9 @@ bad.ok, bad.error, bad.marks    # False, 'Undefined control sequence.', ((1, 6),
 
 - `render` returns a dict keyed by source. A rejected formula keeps LaTeX's message
   and, for an undefined command, where it is in the source (`marks`), to highlight it.
+  A source with a brace, a `$` or an environment never closed is not sent to LaTeX,
+  where it would take the whole batch down: it comes back refused, its faulty places
+  in `marks`, and the other formulas are typeset.
 - `Formula.to_json()` is a JSON-ready summary, sizes in em for web pages.
 - `size` is the type size in points, `dpi` the PNG resolution (288 by default, 600 for
   print); both enter the cache key.
@@ -205,8 +208,9 @@ compilation runs with `-recorder`, and the TeX and Lua files it read (yours, und
 
 - A formula is one line of the batch: display environments spanning paragraphs are not
   supported; `$$…$$` and `\[…\]` are set inline, in `\displaystyle`.
-- A formula may not define commands, read or write files, or change catcodes: it would
-  affect the other formulas of the batch. Define your macros in the preamble.
+- A formula may not define commands, make global assignments, read or write files, or
+  change catcodes: it would affect the other formulas of the batch, and `render`
+  refuses it. Define your macros in the preamble.
 - In a rejected formula, only an undefined command is located; for other errors, the
   message is all TeX gives.
 - A one-page PDF carries the fonts of its whole batch: on its own it is heavier than

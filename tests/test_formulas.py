@@ -74,6 +74,51 @@ def test_shifted_pages_rerun_the_batch_without_the_faulty_formula(book, fake_lat
     assert [formula.ok for formula in result.values()] == [True, False, True]
 
 
+def test_unclosed_source_refused_and_the_others_typeset(book, fake_latex):
+    # Sent to LaTeX, it would swallow the rest of the batch, \end{document} included.
+    result = book.render(["$a$", "$\\frac{1}{2$", "$b$"])
+    assert [formula.ok for formula in result.values()] == [True, False, True]
+    assert fake_latex.calls == 1
+    refused = result["$\\frac{1}{2$"]
+    assert refused.error.startswith("not sent to LaTeX: ")
+    assert [refused.source[start:end] for start, end in refused.marks] == ["$", "{", "$"]
+
+
+@pytest.mark.parametrize(
+    "source", ["$a", "a}", "\\textbf{a", "\\begin{align}x", "\\end{document}", "\\sqrt[3{x}"]
+)
+def test_source_escaping_its_place_never_sent_to_latex(book, fake_latex, source):
+    result = book.render([source])
+    assert not result[source].ok
+    assert result[source].marks
+    assert fake_latex.calls == 0
+
+
+@pytest.mark.parametrize(
+    ("source", "faulty"),
+    [
+        pytest.param("$\\gdef\\x{1}$", "\\gdef", id="definition"),
+        pytest.param("$\\frac{\\def\\a{b}}{2}$", "\\def", id="inside-an-argument"),
+        pytest.param("\\global\\advance\\count0 by 1", "\\global", id="global"),
+        pytest.param("\\input{x}", "\\input", id="file"),
+        pytest.param("\\catcode`\\@=11", "\\catcode", id="catcode"),
+        pytest.param("$\\cdformula{x}$", "\\cdformula", id="batch-macro"),
+    ],
+)
+def test_command_affecting_the_batch_never_sent_to_latex(book, fake_latex, source, faulty):
+    result = book.render(["$a$", source])
+    assert result["$a$"].ok
+    refused = result[source]
+    assert refused.error.startswith(f'not sent to LaTeX: "{faulty}" is not allowed in a formula')
+    assert [source[start:end] for start, end in refused.marks] == [faulty]
+    assert fake_latex.calls == 1
+
+
+def test_refusal_not_kept_in_the_cache(tmp_path, book):
+    book.render(["$a"])
+    assert not list((tmp_path / "cache").glob("*.json"))
+
+
 def test_size_and_resolution_change_the_key(tmp_path, fake_latex):
     common = {"preamble": "", "engine": "lualatex", "runner": fake_latex}
     screen = FormulaBook(tmp_path / "cache", **common)
@@ -215,6 +260,13 @@ def test_real_compilation_with_amsmath(tmp_path, pdflatex):
     assert not rejected.ok
     assert rejected.error.startswith("Undefined control sequence")
     assert [rejected.source[start:end] for start, end in rejected.marks] == ["\\unknown"]
+
+
+@pytest.mark.latex
+def test_real_unclosed_source_spares_the_batch(tmp_path, pdflatex):
+    book = FormulaBook(tmp_path / "cache", preamble="\\usepackage{amsmath}", engine=pdflatex)
+    result = book.render(["$a$", "$\\frac{1}{2$", "$b$"])
+    assert [formula.ok for formula in result.values()] == [True, False, True]
 
 
 @pytest.mark.latex

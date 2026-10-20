@@ -54,6 +54,19 @@ with its release year, which is in the engine's path. Data files the preamble re
 (a ``.py`` read through Lua, say) do not enter it: they change often, and never a
 formula.
 
+**A source that would not stay in its place is never sent to LaTeX.** Each formula is
+the argument of ``\\cdformula``, one line of the batch: a brace, a ``$`` or an
+environment left open swallows the next lines, ``\\end{document}`` included, and a
+brace closed without being opened ends the argument early. TeX then stops on an error
+it attributes to no line of the source, and every formula of the batch comes back
+interrupted, the sound ones too. So latexdetok reads each source alone first, as
+``split`` reads a line, and a source with such a defect is refused, with latexdetok's
+message and its places (``Formula.marks``); the others are typeset. So is a source
+holding a command that would affect the other formulas, as ``split`` refuses it: a
+definition or a global assignment, a file read or written, a catcode change, the
+``document`` environment. The refusal is not kept: reading the source again costs
+nothing. The other errors are left to TeX, which attributes them to their line.
+
 A formula TeX rejects is located by the line of the error in the log
 (``-file-line-error``): it stays as raw LaTeX, flagged, and the rejection is kept. A
 rejection that is not the formula's own doing (broken preamble, interrupted
@@ -73,13 +86,14 @@ import subprocess
 import sys
 import tempfile
 import threading
-from collections.abc import Callable, Iterable, Sequence
+from collections.abc import Callable, Iterable, Iterator, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 import pypdfium2
-from latexdetok import TexFile, TexGroup
+from latexdetok import TexFile, TexGroup, check
+from latexdetok.definitions import DEFINING_COMMANDS, INCLUDING_COMMANDS
 
 __all__ = [
     "BP_PER_PT",
@@ -104,6 +118,33 @@ _OWN_ERROR = "own"
 # The sources recorded in the manifest, data files excluded (see the module docstring).
 _SOURCES = frozenset({".tex", ".sty", ".cls", ".cfg", ".def", ".fd", ".clo", ".ldf", ".ltx", ".lua"})
 _DEFAULT_PREAMBLE = "\\usepackage{amsmath,amssymb}\n\\usepackage{siunitx}"
+# What a formula may not carry: they all go into a single document, which
+# a definition, a global assignment, a file read or written, a catcode change or the ``document``
+# environment would affect as a whole; and the two macros that document defines for
+# itself. latexdetok recognises them as commands, where a hand-written pattern only saw
+# letters: "cd[a-z]+", meant for those two macros, rejected ``\\cdot``.
+_FORBIDDEN = (
+    DEFINING_COMMANDS
+    | frozenset(INCLUDING_COMMANDS)
+    | {"global", "write", "openout", "openin", "immediate", "catcode", "makeatletter", "makeatother"}
+    | {"cdformula", "cdsizes"}
+)
+# What latexdetok finds that would carry a formula out of its place in the batch: an
+# argument, a math mode or an environment that never closes, or that closes what it
+# did not open (see the module docstring).
+_ESCAPES = frozenset(
+    {
+        "unclosed-brace",
+        "extra-brace",
+        "unclosed-bracket",
+        "unclosed-math",
+        "unclosed-environment",
+        "end-without-begin",
+        "crossed-environment",
+        "crossed-environments",
+        "unclosed-verbatim",
+    }
+)
 
 #: What runs the engine: ``subprocess.run``'s signature; tests pass a fake.
 Runner = Callable[..., Any]
@@ -301,7 +342,8 @@ class FormulaBook:
         """The formulas asked for, typeset if need be; a single compilation for all of them."""
         wanted = list(dict.fromkeys(sources))
         with self._lock:
-            known = {source: self._cached(source) for source in wanted}
+            known = {source: _refused(source, self._key(source), self._size) for source in wanted}
+            known |= {source: self._cached(source) for source, refusal in known.items() if refusal is None}
             missing = [source for source, formula in known.items() if formula is None]
             if missing:
                 results = self._compile(missing)
@@ -552,6 +594,67 @@ def _errors(log: Path) -> dict[int, tuple[str, str]]:
             context = lines[rank + 1] if rank + 1 < len(lines) else ""
             errors.setdefault(int(found.group(1)), (found.group(2).strip(), context))
     return errors
+
+
+def _refused(source: str, key: str, size: float) -> Formula | None:
+    """The refusal of a source that would not stay in its place in the batch, or None.
+
+    latexdetok reads it alone, as ``split`` reads a line: a brace, a ``$`` or an
+    environment left open would swallow the next formulas and ``\\end{document}``, and
+    a closing one with no opening would end the argument of ``\\cdformula`` early. TeX
+    then attributes the error to no line of the source, and the whole batch is lost.
+    A command that would affect the other formulas (a definition, a file read or
+    written, a catcode change) is refused as ``split`` refuses it. The refusal is not
+    kept in the cache: reading the source again costs nothing.
+    """
+    lines = source.splitlines(keepends=True) or [""]
+    starts = [0]
+    for line in lines:
+        starts.append(starts[-1] + len(line))
+    tex = TexFile(lines)
+    found = [
+        (diagnostic.message, diagnostic.start, diagnostic.end)
+        for diagnostic in check(tex, follow_inputs=False)
+        if diagnostic.code in _ESCAPES
+    ]
+    found += [
+        (message, node.start_position, node.end_position)  # type: ignore[attr-defined]
+        for top in tex.analyse().content
+        for node in _walk(top)
+        if (message := _forbidden_reason(node)) is not None
+    ]
+    if not found:
+        return None
+    marks = sorted(
+        {(starts[start[0] - 1] + start[1], starts[end[0] - 1] + end[1]) for _, start, end in found}
+    )
+    return Formula(
+        source=source,
+        key=key,
+        ok=False,
+        error=f"not sent to LaTeX: {found[0][0]}",
+        size=size,
+        marks=tuple(marks),
+    )
+
+
+def _forbidden_reason(node: object) -> str | None:
+    """Why a node may not go into the batch (``_FORBIDDEN``, the ``document``
+    environment), or None."""
+    if node.is_env("document"):  # type: ignore[attr-defined]
+        name = 'the "document" environment'
+    elif node.is_command() and node.content in _FORBIDDEN:  # type: ignore[attr-defined]
+        name = f'"\\{node.content}"'  # type: ignore[attr-defined]
+    else:
+        return None
+    return f"{name} is not allowed in a formula: it would affect the other formulas, typeset together"
+
+
+def _walk(node: object) -> Iterator[object]:
+    yield node
+    if isinstance(node, TexGroup):
+        for child in node.content:
+            yield from _walk(child)
 
 
 def _faulty(source: str, message: str, context: str) -> tuple[tuple[int, int], ...]:

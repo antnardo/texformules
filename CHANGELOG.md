@@ -3,6 +3,21 @@
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 [Semantic Versioning](https://semver.org/).
 
+## [0.2.1] — 2026-10-20
+
+### Fixed
+
+- `FormulaBook.render` no longer loses the whole batch to one source left open. A
+  brace, a bracket, a `$` or an environment never closed (or closed without being
+  opened) swallowed the next formulas and `\end{document}`, and every formula came back
+  `compilation interrupted`. latexdetok now reads each source before the batch is
+  written: such a source is refused (`not sent to LaTeX: …`, its places in `marks`),
+  and the others are typeset.
+- `FormulaBook.render` refuses as well the commands `split` keeps as text, which would
+  affect the other formulas of the batch: definitions, `\global`, file input and
+  output, `\catcode`, `\makeatletter`, the `document` environment, `\cdformula` and
+  `\cdsizes`. A caller that did not go through `split` sent them to LaTeX.
+
 ## [0.2.0] — 2026-10-18
 
 texformules does one thing: the formulas.
@@ -38,5 +53,6 @@ First release.
   `Formula.to_json()` gives sizes in em for web pages.
 - `default_cache()`, `default_preamble()`, `french_spacing()`, `BP_PER_PT`.
 
+[0.2.1]: https://github.com/antnardo/texformules/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/antnardo/texformules/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/antnardo/texformules/releases/tag/v0.1.0

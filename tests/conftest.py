@@ -14,7 +14,9 @@ class FakeLatex:
     """A fake lualatex: one page and one line of dimensions per formula.
 
     A formula holding ``\\bad`` is rejected at its line; ``\\badpreamble`` breaks the
-    preamble; ``\\twopages`` produces one page too many, which shifts the next ones.
+    preamble; ``\\twopages`` produces one page too many, which shifts the next ones. A
+    formula whose braces or ``$`` do not balance swallows the rest of the document, as
+    TeX does: no PDF, and an error on no line of the source.
     With ``-recorder``, the ``.fls`` claims to have read the files of ``inputs``. Each
     page has the size of the announced box, half-point border included, as with
     ``preview``.
@@ -33,6 +35,12 @@ class FakeLatex:
         log, sizes = [], []
         document = pypdfium2.PdfDocument.new()
         for number, line in formulas:
+            if line.count("{") != line.count("}") or line.count("$") % 2:
+                (work / "formules.log").write_text(
+                    "! File ended while scanning use of \\cdformula.\n", encoding="utf-8"
+                )
+                document.close()
+                return
             if "\\badpreamble" in line:
                 log.append(f"./formules.tex:{first - 2}: LaTeX Error: File `missing.sty' not found.")
             elif "\\bad" in line:

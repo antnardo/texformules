@@ -31,7 +31,7 @@ from texformules.formulas import (
 )
 from texformules.fragments import Fragment, Problem, comments, french_spacing, split
 
-__version__ = "0.2.0"
+__version__ = "0.2.1"
 
 __all__ = [
     "BP_PER_PT",

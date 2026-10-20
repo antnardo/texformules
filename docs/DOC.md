@@ -122,7 +122,7 @@ with the arguments their signature gives them.
 6. **Checks.** latexdetok's diagnostics for the whole line are attached to the words
    they touch. A word with an `error` or a `warning` stays text, as typed. So does a
    word holding a command that would affect the other formulas of the batch:
-   definitions (`\def`, `\newcommand`…), file input (`\input`, `\include`…),
+   definitions (`\def`, `\newcommand`…), `\global`, file input (`\input`, `\include`…),
    `\write`, `\openout`, `\openin`, `\immediate`, `\catcode`, `\makeatletter`,
    `\makeatother`, the `document` environment, and the batch's own macros
    `\cdformula` and `\cdsizes`.
@@ -169,12 +169,29 @@ The `error` strings texformules writes itself:
 
 | `error` | Cause | Cached |
 | --- | --- | --- |
+| `not sent to LaTeX: <latexdetok's message>` | a brace, a bracket, a `$` or an environment never closed, or closed without being opened | no |
+| `not sent to LaTeX: "\gdef" is not allowed in a formula: …` | a command that would affect the other formulas, the ones `split` refuses (step 6 above) | no |
 | TeX's message, e.g. `Undefined control sequence.` | the formula's own error | yes |
 | `preamble: <TeX's message>` | the preamble does not compile | no |
 | `compilation interrupted` | fewer pages or dimensions than formulas | no |
 | `unreadable dimensions` | a line of the `.sizes` file could not be parsed | no |
 | `LaTeX did not finish: <reason>` | the engine could not run, or timed out | no |
 | `no LaTeX distribution on this machine` | no engine found | no |
+
+Before the compilation, latexdetok reads each source alone. One that would not stay in
+its place in the batch — `$\frac{1}{2$`, `a}`, `\begin{align}x` — would swallow the
+next formulas and `\end{document}`, and TeX would attribute the error to no line: it is
+refused, with `marks` on the faulty places, and the others are typeset. So is a source
+holding a command that would affect the other formulas, the ones `split` keeps as text
+(step 6 above):
+
+```python
+formulas = book.render(["$a$", r"$\frac{1}{2$"])
+formulas["$a$"].ok                            # True
+bad = formulas[r"$\frac{1}{2$"]
+bad.error                                     # 'not sent to LaTeX: “$” never closed'
+[bad.source[s:e] for s, e in bad.marks]       # ['$', '{', '$']
+```
 
 When some formulas fail on their own and others are interrupted (a faulty formula can
 shift the pages of the next ones), the interrupted ones are compiled once more

@@ -31,11 +31,11 @@ French with ``latexdetok.set_language("fr")`` or ``LATEXDETOK_LANG=fr``.
 """
 
 import re
-from collections.abc import Iterator
 from dataclasses import dataclass
 
 from latexdetok import Severity, TexComment, TexFile, TexGroup, check
-from latexdetok.definitions import DEFINING_COMMANDS, INCLUDING_COMMANDS
+
+from texformules.formulas import _forbidden_reason, _walk
 
 __all__ = ["Fragment", "Problem", "comments", "french_spacing", "split"]
 
@@ -65,17 +65,6 @@ _TEXT_COMMANDS = {
     "textendash": "–",
     "textemdash": "—",
 }
-# What a formula may not carry: they all go into a single document (formulas.py), which
-# a definition, a file read or written, a catcode change or the ``document``
-# environment would affect as a whole; and the two macros that document defines for
-# itself. latexdetok recognises them as commands, where a hand-written pattern only saw
-# letters: "cd[a-z]+", meant for those two macros, rejected ``\\cdot``.
-_FORBIDDEN = (
-    DEFINING_COMMANDS
-    | frozenset(INCLUDING_COMMANDS)
-    | {"write", "openout", "openin", "immediate", "catcode", "makeatletter", "makeatother"}
-    | {"cdformula", "cdsizes"}
-)
 _LIGATURES = (("---", "—"), ("--", "–"), ("``", "“"), ("''", "”"))
 _BLANKS = " \t\r\n"
 
@@ -271,11 +260,8 @@ class _Source:
         rank = {index: position for position, index in enumerate(run)}
         found = []
         for node in (child for top in nodes for child in _walk(top)):
-            if node.is_env("document"):  # type: ignore[attr-defined]
-                name = 'the "document" environment'
-            elif node.is_command() and node.content in _FORBIDDEN:  # type: ignore[attr-defined]
-                name = f'"\\{node.content}"'  # type: ignore[attr-defined]
-            else:
+            message = _forbidden_reason(node)
+            if message is None:
                 continue
             start, end = self.span(node)
             inside = [rank[index] for index in range(start, end) if index in rank]
@@ -285,8 +271,7 @@ class _Source:
                         min(inside),
                         max(inside) + 1,
                         Severity.ERROR.value,
-                        f"{name} is not allowed in a formula: it would affect the other formulas, "
-                        "typeset together",
+                        message,
                     )
                 )
         return tuple(found)
@@ -363,13 +348,6 @@ class _Source:
 
 def _lines(text: str) -> list[str]:
     return text.splitlines(keepends=True) or [""]
-
-
-def _walk(node: object) -> Iterator[object]:
-    yield node
-    if isinstance(node, TexGroup):
-        for child in node.content:
-            yield from _walk(child)
 
 
 def _overlaps(first: tuple[int, int], second: tuple[int, int]) -> bool:
