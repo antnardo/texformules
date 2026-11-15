@@ -204,13 +204,40 @@ and the content of every file the preamble reads outside the TeX distribution: e
 compilation runs with `-recorder`, and the TeX and Lua files it read (yours, under
 `TEXMFHOME` included) are listed in a manifest. Delete the folder to clear the cache.
 
+## Security
+
+LaTeX is a programming language, and LuaLaTeX runs Lua: a formula is code, run with
+the rights of whoever runs the engine. **texformules typesets sources you trust** —
+yours, or your colleagues'.
+
+What it does against a hostile source:
+
+- **The engine is closed.** It runs with `-no-shell-escape`, so no program is
+  started, not even the few TeX Live allows by default; and with `openout_any=p`, so
+  neither TeX nor Lua writes, removes or renames a file outside the working folder.
+- **The source is checked.** `render` refuses, before LaTeX, a formula holding Lua
+  (`\directlua`, `\lua…`, `luacode`, `\ExplSyntaxOn`), a command that reads a file into
+  the page (`\input`, `\verbatiminput`, `\includegraphics`…), or a way to build a
+  command the check would not see (`\csname`, `\scantokens`, the `^^` notation).
+
+What it does not do: **keep a formula from reading your files.** The check is a list
+of names, and a macro of your preamble or a package may offer the same thing under
+another one; TeX reads any file the account can read, and what it reads comes back in
+the image. If the sources come from people you do not trust, run the engine where
+there is nothing to read: a container, or an account of its own (pass
+`engine="/path/to/a/wrapper"`).
+
+The preamble is not checked: it is a setting, not an input. Read one before adopting
+it.
+
 ## Limits
 
 - A formula is one line of the batch: display environments spanning paragraphs are not
   supported; `$$…$$` and `\[…\]` are set inline, in `\displaystyle`.
 - A formula may not define commands, make global assignments, read or write files, or
   change catcodes: it would affect the other formulas of the batch, and `render`
-  refuses it. Define your macros in the preamble.
+  refuses it. Define your macros in the preamble. Nor may it run code or read a file
+  (see [Security](#security)).
 - In a rejected formula, only an undefined command is located; for other errors, the
   message is all TeX gives.
 - A one-page PDF carries the fonts of its whole batch: on its own it is heavier than

@@ -22,6 +22,7 @@
   - [How errors are located](#how-errors-are-located)
   - [The cache](#the-cache)
   - [The JSON of `Formula.to_json()`](#the-json-of-formulato_json)
+- [Security](#security)
 - [Troubleshooting](#troubleshooting)
 - [Every name the package exports](#every-name-the-package-exports)
 
@@ -171,6 +172,7 @@ The `error` strings texformules writes itself:
 | --- | --- | --- |
 | `not sent to LaTeX: <latexdetok's message>` | a brace, a bracket, a `$` or an environment never closed, or closed without being opened | no |
 | `not sent to LaTeX: "\gdef" is not allowed in a formula: …` | a command that would affect the other formulas, the ones `split` refuses (step 6 above) | no |
+| `not sent to LaTeX: "\directlua" is not allowed in a formula: it would run code on the machine` | Lua, the shell, or what reads a file or builds a command name (see [Security](#security)) | no |
 | TeX's message, e.g. `Undefined control sequence.` | the formula's own error | yes |
 | `preamble: <TeX's message>` | the preamble does not compile | no |
 | `compilation interrupted` | fewer pages or dimensions than formulas | no |
@@ -257,15 +259,15 @@ own.
 ### `Runner`
 
 The type of `FormulaBook(runner=…)`: a callable with `subprocess.run`'s signature. It
-is called as `runner(command, cwd=folder, capture_output=True, timeout=…,
-check=False)`; its return value is ignored, the files it leaves in `cwd` are read.
+is called as `runner(command, cwd=folder, env=…, capture_output=True, timeout=…,
+check=False)`, `env` being the process's environment plus `openout_any=p`; its return value is ignored, the files it leaves in `cwd` are read.
 Tests pass a fake that writes those files.
 
 ### The batch document
 
 The missing formulas are written, one per line, into a document of class `book` at
 10 pt (the body is set at `size`), compiled with
-`-interaction=nonstopmode -file-line-error -recorder`:
+`-no-shell-escape -interaction=nonstopmode -file-line-error -recorder`:
 
 ```latex
 \documentclass[10pt]{book}
@@ -349,6 +351,50 @@ For a rejected formula:
 ```
 
 `error` is `"rejected by LaTeX"` when no message was kept.
+
+## Security
+
+texformules typesets sources you trust. A formula is TeX code, and under LuaLaTeX it
+may hold Lua; both run with the rights of the account that runs the engine.
+
+**The engine.** Every compilation runs with `-no-shell-escape` and with `openout_any=p`
+in its environment:
+
+| Attempt | Without these | With them |
+| --- | --- | --- |
+| `\write18`, `os.execute`, `io.popen` of any program | refused, except the programs of TeX Live's `shell_escape_commands` (`kpsewhich`, `bibtex`…) | refused |
+| writing, removing or renaming a file outside the working folder (TeX or Lua) | refused if the machine's `texmf.cnf` says `openout_any = p`, TeX Live's default | refused |
+| reading any file the account can read | allowed | **allowed** |
+
+`openin_any=p` is not set: in a trial on TeX Live 2026 it did not stop `\input` of an
+absolute path. LuaTeX's `--safer` is not used either: luaotfload refuses to run under
+it, so fontspec and unicode-math preambles break, and Lua can still read files
+(`io.lines`, `loadfile`).
+
+**The source.** Before LaTeX, `render` refuses a source holding:
+
+- Lua: any command whose name starts with `lua`, `directlua` or `latelua`, the
+  `luacode`, `luacode*` and `luacodestar` environments, `\ExplSyntaxOn` (behind which
+  expl3's `\lua_now:n` and `\sys_shell_now:n` live), `\ShellEscape`;
+- a file read into the page: the inputs `split` refuses, and `\verbatiminput`,
+  `\VerbatimInput`, `\lstinputlisting`, `\inputminted`, `\includegraphics`,
+  `\includepdf`, `\includestandalone`, `\import`, `\subimport`, `\pdfximage`,
+  `\saveimageresource`, `\special`, `\pdfliteral`, `\pdfextension`; and the
+  `filecontents` environments, which write one;
+- a command built out of characters, which no check of names can see: `\csname`,
+  `\ifcsname`, `\begincsname`, `\lastnamedcs`, `\scantokens`, `\scantextokens`, and any
+  `^^`. TeX decodes `^^69` into `i` as it reads the file, so `\wr^^69te18` is
+  `\write18`; no formula needs it.
+
+The refusal says which: `it would run code on the machine`, `it would read a file`,
+`it builds a command the check cannot see`, and `marks` points at the command.
+
+**What is left.** The check is a list of names: a macro of the preamble, or a package
+it loads, may offer the same under another name. And TeX reads any file the account
+can read; what it reads is set in the page, and comes back in the image. So, before
+sources from people you do not trust, run the engine where it has nothing to read: a
+container, or an account of its own, through a wrapper passed as `engine=`. The
+preamble is never checked: it is a setting, read it before adopting one.
 
 ## Troubleshooting
 

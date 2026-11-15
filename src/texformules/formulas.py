@@ -181,13 +181,14 @@ _ESCAPES = frozenset(
     }
 )
 
-# The engine's environment. ``-no-shell-escape`` closes ``\\write18`` and, under LuaTeX,
+# What the engine's environment adds to the process's, read at each compilation.
+# ``-no-shell-escape`` (in the command) closes ``\\write18`` and, under LuaTeX,
 # ``os.execute`` and ``io.popen``, even to the commands TeX Live allows by default;
 # kpathsea's paranoid ``openout_any`` keeps Lua and TeX from writing, removing or renaming
 # outside the working folder. It is TeX Live's default, set here so as not to depend on
 # the machine's texmf.cnf. ``openin_any=p`` is not set: it did not stop ``\\input`` of an
 # absolute path in a trial on TeX Live 2026, and would only give a false sense of safety.
-_ENGINE_ENV = {**os.environ, "openout_any": "p"}
+_ENGINE_SETTINGS = {"openout_any": "p"}
 
 #: What runs the engine: ``subprocess.run``'s signature; tests pass a fake.
 Runner = Callable[..., Any]
@@ -513,7 +514,7 @@ class FormulaBook:
                 self._runner(
                     command,
                     cwd=work,
-                    env=_ENGINE_ENV,
+                    env={**os.environ, **_ENGINE_SETTINGS},
                     capture_output=True,
                     timeout=self._timeout,
                     check=False,
