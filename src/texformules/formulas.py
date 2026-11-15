@@ -128,7 +128,42 @@ _FORBIDDEN = (
     | frozenset(INCLUDING_COMMANDS)
     | {"global", "write", "openout", "openin", "immediate", "catcode", "makeatletter", "makeatother"}
     | {"cdformula", "cdsizes"}
+    | {"endinput"}
 )
+# What a formula may not carry because it would run code or read a file, whatever the
+# other formulas: Lua (LuaTeX runs it with the rights of whoever runs the engine), the
+# shell, and the commands that read a file into the page, where its content would come
+# back in the image. A list of names is not a sandbox: a macro of the preamble or a
+# package may offer the same under another name (see "Security" in the README).
+_RUNS_CODE = frozenset({"ShellEscape", "ExplSyntaxOn", "scantokens", "scantextokens"})
+_RUNS_CODE_PREFIXES = ("lua", "directlua", "latelua")
+_RUNS_CODE_ENVIRONMENTS = ("luacode", "luacode*", "luacodestar")
+_READS_FILE = frozenset(
+    {
+        "verbatiminput",
+        "VerbatimInput",
+        "lstinputlisting",
+        "inputminted",
+        "includegraphics",
+        "includepdf",
+        "includestandalone",
+        "import",
+        "subimport",
+        "pdfximage",
+        "saveimageresource",
+        "special",
+        "pdfliteral",
+        "pdfextension",
+    }
+)
+_WRITES_FILE_ENVIRONMENTS = ("filecontents", "filecontents*")
+# What builds a command name out of characters, so that the check above never sees it:
+# ``\csname input\endcsname``, ``\ifcsname``/``\lastnamedcs``, LuaTeX's ``\begincsname``.
+_BUILDS_NAME = frozenset({"csname", "ifcsname", "begincsname", "lastnamedcs"})
+# TeX turns ``^^69`` into ``i`` as it reads the file, before any command is named:
+# ``\wr^^69te18`` is ``\write18``. latexdetok does not decode it, so a source holding it
+# is refused outright; no formula needs it.
+_HAT_NOTATION = "^^"
 # What latexdetok finds that would carry a formula out of its place in the batch: an
 # argument, a math mode or an environment that never closes, or that closes what it
 # did not open (see the module docstring).
@@ -145,6 +180,14 @@ _ESCAPES = frozenset(
         "unclosed-verbatim",
     }
 )
+
+# The engine's environment. ``-no-shell-escape`` closes ``\\write18`` and, under LuaTeX,
+# ``os.execute`` and ``io.popen``, even to the commands TeX Live allows by default;
+# kpathsea's paranoid ``openout_any`` keeps Lua and TeX from writing, removing or renaming
+# outside the working folder. It is TeX Live's default, set here so as not to depend on
+# the machine's texmf.cnf. ``openin_any=p`` is not set: it did not stop ``\\input`` of an
+# absolute path in a trial on TeX Live 2026, and would only give a false sense of safety.
+_ENGINE_ENV = {**os.environ, "openout_any": "p"}
 
 #: What runs the engine: ``subprocess.run``'s signature; tests pass a fake.
 Runner = Callable[..., Any]
@@ -458,9 +501,23 @@ class FormulaBook:
         with tempfile.TemporaryDirectory(prefix="texformules-") as folder:
             work = Path(folder)
             first_line = _write_document(work / f"{_JOB}.tex", preamble, sources, self._size)
-            command = [engine, "-interaction=nonstopmode", "-file-line-error", "-recorder", f"{_JOB}.tex"]
+            command = [
+                engine,
+                "-no-shell-escape",
+                "-interaction=nonstopmode",
+                "-file-line-error",
+                "-recorder",
+                f"{_JOB}.tex",
+            ]
             try:
-                self._runner(command, cwd=work, capture_output=True, timeout=self._timeout, check=False)
+                self._runner(
+                    command,
+                    cwd=work,
+                    env=_ENGINE_ENV,
+                    capture_output=True,
+                    timeout=self._timeout,
+                    check=False,
+                )
             except (OSError, subprocess.SubprocessError) as error:
                 return [_Result(source, False, error=f"LaTeX did not finish: {error}") for source in sources]
             self._record_manifest(work, preamble, engine)
@@ -607,6 +664,16 @@ def _refused(source: str, key: str, size: float) -> Formula | None:
     written, a catcode change) is refused as ``split`` refuses it. The refusal is not
     kept in the cache: reading the source again costs nothing.
     """
+    if (hat := source.find(_HAT_NOTATION)) >= 0:
+        return Formula(
+            source=source,
+            key=key,
+            ok=False,
+            error='not sent to LaTeX: "^^" is not allowed in a formula: TeX reads it as another '
+            "character, which hides a command from the check",
+            size=size,
+            marks=((hat, hat + len(_HAT_NOTATION)),),
+        )
     lines = source.splitlines(keepends=True) or [""]
     starts = [0]
     for line in lines:
@@ -641,12 +708,25 @@ def _refused(source: str, key: str, size: float) -> Formula | None:
 def _forbidden_reason(node: object) -> str | None:
     """Why a node may not go into the batch (``_FORBIDDEN``, the ``document``
     environment), or None."""
+    if any(node.is_env(name) for name in _RUNS_CODE_ENVIRONMENTS):  # type: ignore[attr-defined]
+        return "Lua code is not allowed in a formula: it would run on the machine"
+    if any(node.is_env(name) for name in _WRITES_FILE_ENVIRONMENTS):  # type: ignore[attr-defined]
+        return '"filecontents" is not allowed in a formula: it would write a file'
     if node.is_env("document"):  # type: ignore[attr-defined]
         name = 'the "document" environment'
-    elif node.is_command() and node.content in _FORBIDDEN:  # type: ignore[attr-defined]
-        name = f'"\\{node.content}"'  # type: ignore[attr-defined]
-    else:
+    elif not node.is_command():  # type: ignore[attr-defined]
         return None
+    else:
+        command: str = node.content  # type: ignore[attr-defined]
+        name = f'"\\{command}"'
+        if command in _RUNS_CODE or command.startswith(_RUNS_CODE_PREFIXES):
+            return f"{name} is not allowed in a formula: it would run code on the machine"
+        if command in _READS_FILE:
+            return f"{name} is not allowed in a formula: it would read a file"
+        if command in _BUILDS_NAME:
+            return f"{name} is not allowed in a formula: it builds a command the check cannot see"
+        if command not in _FORBIDDEN:
+            return None
     return f"{name} is not allowed in a formula: it would affect the other formulas, typeset together"
 
 

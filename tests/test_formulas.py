@@ -331,3 +331,45 @@ def test_distribution_trees_never_include_the_root(monkeypatch, tmp_path):
     trees = {"-var-value=TEXMFDIST": dist, "-var-value=TEXMFVAR": Path(tmp_path.anchor)}
     monkeypatch.setattr(formulas_module, "_kpsewhich", lambda argument: trees.get(argument))
     assert _distribution_trees() == [dist]
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        r"\directlua{os.execute('x')}",
+        r"\latelua{x}",
+        r"\luaexec{x}",
+        r"\begin{luacode}x\end{luacode}",
+        r"\ExplSyntaxOn\lua_now:n{x}\ExplSyntaxOff",
+        r"\csname directlua\endcsname{x}",
+        r"\ShellEscape{ls}",
+        r"\scantokens{x}",
+        r"\verbatiminput{/etc/hosts}",
+        r"\includegraphics{/etc/hosts}",
+        r"\begin{filecontents}{a.tex}x\end{filecontents}",
+        r"\wr^^69te18{ls}",
+        r"\^^69nput{/etc/hosts}",
+        r"\dir^^65ctlua{x}",
+    ],
+)
+def test_render_code_or_file_access_refused_before_latex(book, fake_latex, source):
+    formula = book.render([source])[source]
+    assert (formula.ok, formula.marks != (), fake_latex.calls) == (False, True, 0)
+
+
+@pytest.mark.parametrize(
+    "source",
+    [r"\frac{a}{b}", r"\vec{v}", r"\text{x}", r"\si{m.s^{-1}}", r"\left(x\right)", r"x^{2}", r"x^2"],
+)
+def test_render_ordinary_formula_passes_check(book, fake_latex, source):
+    assert book.render([source])[source].ok
+
+
+def test_render_engine_runs_without_shell_and_paranoid_output(tmp_path):
+    seen = {}
+
+    def runner(command, cwd, **kwargs):
+        seen.update(command=command, env=kwargs["env"])
+
+    FormulaBook(tmp_path / "cache", preamble="", engine="lualatex", runner=runner).render(["x"])
+    assert ("-no-shell-escape" in seen["command"], seen["env"]["openout_any"]) == (True, "p")
